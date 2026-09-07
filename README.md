@@ -90,6 +90,7 @@ GitHub Actions의 `Windows release`는 Windows에서 Python 3.14.7로 테스트,
 - 기본 음성 인식 모델: `base`, CPU INT8, 최대 4스레드. 모델 변경은 앱 종료 후 `config.json`의 `whisper_model` 값을 `tiny`/`base`/`small`로 수정합니다.
 - 한글 PDF: Windows 맑은 고딕(`malgun.ttf`)이 필요합니다.
 - DLL 오류: [Microsoft Visual C++ x64 재배포 패키지](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)를 확인하세요.
+- `Could not find platform independent libraries <prefix>`가 표시되면 Python 실행 파일과 `Lib` 폴더가 서로 다른 위치에 있는 불완전한 설치입니다. Python 파일을 수동으로 이동하지 말고 공식 설치 관리자로 3.14.7을 복구 설치하세요. `setup.ps1`은 이 상태를 라이브러리 설치 전에 검사합니다.
 - 작업 중에는 중복 실행과 일반 종료를 막습니다. 강제 취소 기능은 없으며 온라인 서비스 응답이 지연될 수 있습니다.
 - 같은 출력 이름을 사용하면 기존 결과가 교체될 수 있습니다. 필요한 원본과 Anki 덱을 먼저 백업하세요.
 - 앱 제거 후에도 사용자 설정과 모델 폴더는 남습니다. 필요하지 않으면 사용자가 별도로 삭제할 수 있습니다.
@@ -101,3 +102,4 @@ GitHub Actions의 `Windows release`는 Windows에서 Python 3.14.7로 테스트,
 본인에게 처리 권한이 있는 콘텐츠만 사용하세요. 쿠키가 필요한 경우 `%LOCALAPPDATA%\StudyHelper\cookies.txt`에 개인적으로 저장하며, 쿠키·로그·개인 데이터는 저장소나 배포 파일에 올리지 마세요.
 
 배포 파일에 포함되는 의존성 고지는 `_internal\THIRD_PARTY_NOTICES`에서 확인할 수 있습니다. FFmpeg 실행 파일은 별도 설치하며, PyAV 등에 포함된 네이티브 라이브러리의 고지는 별개입니다. 이 저장소 자체의 오픈소스 라이선스는 아직 지정하지 않았습니다. 공개 열람 가능 여부와 재배포 허락은 별개입니다.
+
