@@ -113,4 +113,3 @@ jobs:
             build/StudyHelper/warn-StudyHelper.txt
             release-assets/SHA256SUMS.txt
           if-no-files-found: ignore
-

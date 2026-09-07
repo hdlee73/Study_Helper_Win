@@ -1,6 +1,6 @@
 #define AppName "Study Helper"
 #ifndef AppVersion
-#define AppVersion "2.0.0-rc.1"
+#define AppVersion "2.1.0-rc.1"
 #endif
 [Setup]
 AppId={{03633B7D-910C-4640-8DFE-8C1DF0B2B7DB}

@@ -12,11 +12,30 @@ import pandas as pd
 SOURCE = Path(__file__).with_name('study_helper.py').read_text(encoding='utf-8')
 TREE = ast.parse(SOURCE)
 NAMES = {'sanitize_filename', 'split_sentences', 'dedupe_df', 'atomic_write', 'save_rows_to_excel',
-         'import_excel_to_anki', 'render_audio_plan', 'calculate_pause_seconds', 'detect_lang'}
-NS = dict(Path=Path, os=os, re=re, tempfile=tempfile, pd=pd, List=list, html=html, asyncio=asyncio)
+         'pandas_module', 'find_anki_executable', 'import_excel_to_anki', 'render_audio_plan',
+         'calculate_pause_seconds', 'detect_lang'}
+NS = dict(Path=Path, os=os, re=re, tempfile=tempfile, PANDAS=pd, List=list, html=html,
+          asyncio=asyncio, shutil=__import__('shutil'), time=__import__('time'),
+          subprocess=__import__('subprocess'), requests=__import__('requests'))
 exec(compile(ast.Module(body=[n for n in TREE.body if isinstance(n, ast.FunctionDef) and n.name in NAMES],type_ignores=[]), '<backend>', 'exec'), NS)
 
 class RegressionTests(unittest.TestCase):
+    def test_heavy_dependencies_are_lazy(self):
+        top_imports = set()
+        for node in TREE.body:
+            if isinstance(node, ast.Import):
+                top_imports.update(alias.name.split('.')[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                top_imports.add(node.module.split('.')[0])
+        self.assertTrue({'pandas', 'yt_dlp', 'edge_tts', 'fpdf', 'deep_translator'}.isdisjoint(top_imports))
+
+    def test_configured_anki_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            executable = Path(tmp) / 'Anki.exe'
+            executable.write_bytes(b'test')
+            NS['CONFIG'] = {'anki_executable': str(executable)}
+            self.assertEqual(NS['find_anki_executable'](), executable)
+
     def test_windows_names(self):
         for raw in ('CON', 'NUL.txt', 'a/b:c', 'hello.', '../escape'):
             safe = NS['sanitize_filename'](raw)

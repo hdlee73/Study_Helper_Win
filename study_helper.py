@@ -9,19 +9,13 @@ import os
 import tempfile
 from pathlib import Path
 from typing import List, Tuple
+from concurrent.futures import ThreadPoolExecutor
 
 import customtkinter as ctk
-import pandas as pd
 import requests
 import tkinter as tk
 from tkinter import filedialog, messagebox
-from deep_translator import GoogleTranslator
-import yt_dlp
 import multiprocessing
-import edge_tts
-
-# PDF output
-from fpdf import FPDF
 
 import sys
 import queue
@@ -45,7 +39,10 @@ DEFAULT_CONFIG = {
     "anki_note_type": "English",
     "tts_voice_en": "en-US-AndrewMultilingualNeural",
     "tts_voice_ko": "ko-KR-SunHiNeural",
-    "whisper_model": "base"
+    "whisper_model": "base",
+    "whisper_beam_size": 1,
+    "tts_concurrency": 4,
+    "anki_wait_seconds": 45
 }
 
 VOICE_MAP = {
@@ -56,6 +53,15 @@ VOICE_MAP = {
 
 CONFIG = None
 WHISPER_MODEL = None
+PANDAS = None
+ANKI_SESSION = requests.Session()
+
+def pandas_module():
+    global PANDAS
+    if PANDAS is None:
+        import pandas
+        PANDAS = pandas
+    return PANDAS
 
 def get_ffmpeg_path():
     for root in (RESOURCE_DIR, Path(sys.executable).parent):
@@ -88,7 +94,12 @@ def get_whisper_model():
     return WHISPER_MODEL
 
 def transcribe_audio(path):
-    segments, info = get_whisper_model().transcribe(str(Path(path).resolve()), beam_size=5)
+    segments, info = get_whisper_model().transcribe(
+        str(Path(path).resolve()),
+        beam_size=max(1, int(CONFIG.get("whisper_beam_size", 1))),
+        vad_filter=True,
+        condition_on_previous_text=False,
+    )
     texts = [s.text.strip() for s in segments if s.text.strip()]
     if not texts: raise RuntimeError("음성 인식 결과가 비어 있습니다.")
     return {"text": " ".join(texts), "segments": [{"text": s} for s in texts]}
@@ -127,13 +138,14 @@ def split_sentences(segments: List[str]) -> List[str]:
 
 @lru_cache(maxsize=2048)
 def translate_pair(sentence: str, lang: str) -> Tuple[str, str]:
+    from deep_translator import GoogleTranslator
     if lang == "ko":
         en = GoogleTranslator(source='ko', target='en').translate(sentence)
         return sentence, en
     ko = GoogleTranslator(source='en', target='ko').translate(sentence)
     return ko, sentence
 
-def dedupe_df(df: pd.DataFrame) -> pd.DataFrame:
+def dedupe_df(df):
     df = df.fillna("")
     for _ in range(3 - len(df.columns)): df[len(df.columns)] = ""
     df = df.iloc[:, :3].copy()
@@ -144,6 +156,7 @@ def dedupe_df(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop_duplicates(subset=[0, 1, 2], keep='first').reset_index(drop=True)
 
 def fetch_title(url: str) -> str:
+    import yt_dlp
     # 쿠키를 가져올 브라우저 지정 (예: 'chrome', 'edge', 'firefox' 등)
     ydl_opts = {
         'quiet': True, 
@@ -155,6 +168,7 @@ def fetch_title(url: str) -> str:
         return info.get("title") or "audio"
 
 def download_youtube_mp3(url: str, output_dir: str, file_name: str):
+    import yt_dlp
     output_dir_path = Path(output_dir)
     output_dir_path.mkdir(parents=True, exist_ok=True)
     final_name = sanitize_filename(file_name)
@@ -188,15 +202,18 @@ def transcribe_mp3_to_rows(mp3_path: str):
     if not texts: raise RuntimeError("음성 인식 결과가 비어 있습니다.")
 
     sentences = split_sentences(texts)
+    jobs = [(sent, detect_lang(sent)) for sent in sentences]
+    worker_count = min(4, len(jobs))
+    with ThreadPoolExecutor(max_workers=max(1, worker_count)) as pool:
+        pairs = list(pool.map(lambda job: translate_pair(*job), jobs))
     rows = []
     stem = Path(mp3_path).stem
-    for sent in sentences:
-        lang = detect_lang(sent)
-        front, back = translate_pair(sent, lang)
+    for (sent, _), (front, back) in zip(jobs, pairs):
         rows.append([front, back, stem])
     return rows
 
 def save_rows_to_excel(rows, excel_path: str):
+    pd = pandas_module()
     target = Path(excel_path)
     new_df = pd.DataFrame(rows)
     old_df = pd.read_excel(target, header=None) if target.exists() else pd.DataFrame(columns=[0,1,2])
@@ -204,31 +221,58 @@ def save_rows_to_excel(rows, excel_path: str):
     atomic_write(target, lambda p: combined.to_excel(p, header=False, index=False, engine="openpyxl"))
     return str(target), len(combined)
 
-def anki_request(action, **params):
+def anki_request(action, request_timeout=5, **params):
     payload = {"action": action, "version": 6, "params": params}
-    r = requests.post("http://127.0.0.1:8765", json=payload, timeout=30)
+    r = ANKI_SESSION.post("http://127.0.0.1:8765", json=payload, timeout=request_timeout)
     r.raise_for_status()
     data = r.json()
     if data.get("error"):
         raise RuntimeError(data.get("error"))
     return data.get("result")
 
+def find_anki_executable():
+    configured = str(CONFIG.get("anki_executable", "")).strip()
+    candidates = [
+        configured,
+        shutil.which("anki") or "",
+        str(Path(os.environ.get("LOCALAPPDATA", "")) / "Programs/Anki/anki.exe"),
+        str(Path(os.environ.get("LOCALAPPDATA", "")) / "Anki/anki.exe"),
+        "C:/Anki/Anki.exe",
+        "C:/Program Files/Anki/anki.exe",
+        "C:/Program Files (x86)/Anki/anki.exe",
+    ]
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return Path(candidate)
+    return None
+
 def import_excel_to_anki(excel_path: str, custom_deck_name: str = ""):
+    pd = pandas_module()
     df = dedupe_df(pd.read_excel(excel_path, header=None))
-    try: anki_request("version")
-    except requests.RequestException:
-        for p in (Path(os.environ.get("LOCALAPPDATA", "")) / "Programs/Anki/anki.exe",
-                  Path("C:/Program Files/Anki/anki.exe")):
-            if p.is_file():
-                subprocess.Popen([str(p)])
-                break
-        for attempt in range(15):
-            time.sleep(1)
+    try:
+        anki_request("version", request_timeout=2)
+    except requests.RequestException as first_error:
+        executable = find_anki_executable()
+        if executable is None:
+            raise RuntimeError(
+                "Anki가 실행 중이 아니며 실행 파일도 찾지 못했습니다. Anki를 직접 연 뒤 다시 시도하세요. "
+                "사용자 지정 설치라면 config.json의 anki_executable에 전체 경로를 적을 수 있습니다."
+            ) from first_error
+        subprocess.Popen([str(executable)], close_fds=True)
+        deadline = time.monotonic() + max(10, int(CONFIG.get("anki_wait_seconds", 45)))
+        last_error = first_error
+        while time.monotonic() < deadline:
+            time.sleep(0.75)
             try:
-                anki_request("version")
+                anki_request("version", request_timeout=2)
                 break
-            except requests.RequestException:
-                if attempt==14: raise RuntimeError("Anki를 열고 AnkiConnect 추가 기능을 설치해 주세요.")
+            except requests.RequestException as error:
+                last_error = error
+        else:
+            raise RuntimeError(
+                f"Anki는 {executable}에서 열었지만 AnkiConnect(127.0.0.1:8765)가 응답하지 않습니다. "
+                "Anki의 도구 → 추가 기능에서 AnkiConnect가 활성화됐는지 확인하고 Anki를 재시작하세요."
+            ) from last_error
     model = CONFIG["anki_note_type"]
     if model not in anki_request("modelNames"):
         raise RuntimeError(f'Anki에 "{model}" 노트 유형을 만들고 Front, Back, Example 필드를 추가하세요.')
@@ -265,6 +309,7 @@ def import_excel_to_anki(excel_path: str, custom_deck_name: str = ""):
     return deck, added, skipped, len(df)
 
 async def save_tts_line(text: str, voice: str, output_path: str):
+    import edge_tts
     for attempt in range(3):
         try:
             await asyncio.wait_for(edge_tts.Communicate(text=text, voice=voice).save(output_path), timeout=90)
@@ -275,13 +320,30 @@ async def save_tts_line(text: str, voice: str, output_path: str):
             await asyncio.sleep(2 ** attempt)
 
 def make_silence_mp3(seconds: float, output_path: str):
-    run_ffmpeg(["-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", str(seconds), output_path])
+    run_ffmpeg(["-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", str(seconds),
+                "-ar", "24000", "-ac", "1", "-b:a", "48k", output_path])
 
 def concat_mp3_files(input_files: List[str], output_file: str):
-    # Decode one part at a time. Disk-backed PCM avoids quadratic RAM growth and mixed-codec concat.
     target = Path(output_file)
     target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="study_", dir=target.parent) as tmp:
+        list_file = Path(tmp) / "parts.txt"
+        entries = []
+        for part in input_files:
+            escaped = Path(part).resolve().as_posix().replace("'", "'\\''")
+            entries.append(f"file '{escaped}'")
+        list_file.write_text("\n".join(entries), encoding="utf-8")
+        try:
+            atomic_write(target, lambda p: run_ffmpeg([
+                "-f", "concat", "-safe", "0", "-i", str(list_file),
+                "-vn", "-ar", "24000", "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(p)
+            ]))
+        except RuntimeError:
+            logging.warning("Fast MP3 concat failed; using compatibility path", exc_info=True)
+            concat_mp3_files_compat(input_files, target)
+
+def concat_mp3_files_compat(input_files, target):
+    with tempfile.TemporaryDirectory(prefix="study_pcm_", dir=Path(target).parent) as tmp:
         pcm = Path(tmp) / "all.pcm"
         with pcm.open("wb") as stream:
             for part in input_files:
@@ -289,9 +351,12 @@ def concat_mp3_files(input_files: List[str], output_file: str):
                            "-f", "s16le", "-ar", "24000", "-ac", "1", "pipe:1"]
                 result = subprocess.run(command, stdout=stream, stderr=subprocess.PIPE,
                                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-                if result.returncode: raise RuntimeError(result.stderr.decode('utf-8', 'replace')[-2000:])
-        atomic_write(target, lambda p: run_ffmpeg(["-f", "s16le", "-ar", "24000", "-ac", "1",
-                                                   "-i", str(pcm), "-c:a", "libmp3lame", "-b:a", "128k", str(p)]))
+                if result.returncode:
+                    raise RuntimeError(result.stderr.decode("utf-8", "replace")[-2000:])
+        atomic_write(target, lambda p: run_ffmpeg([
+            "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", str(pcm),
+            "-c:a", "libmp3lame", "-b:a", "128k", str(p)
+        ]))
 
 def require_ffmpeg():
     path = get_ffmpeg_path()
@@ -309,6 +374,7 @@ def cookie_options():
     return {"cookiefile": str(path)} if path.is_file() else {}
 
 def speech_pdf(text, target):
+    from fpdf import FPDF
     font = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "malgun.ttf"
     if not font.is_file(): raise RuntimeError("한글 PDF에 필요한 Windows 맑은 고딕 글꼴이 없습니다.")
     pdf = FPDF(format="A4")
@@ -323,6 +389,7 @@ def calculate_pause_seconds(text: str) -> float:
     return max(2.5, min(7.0, len(text.split()) * 0.4 + 1.5))
 
 def excel_to_mp3_files(excel_path: str, output_dir: str, split_limit: int = 500):
+    pd = pandas_module()
     if split_limit < 1: raise ValueError("split_limit must be positive")
     df = dedupe_df(pd.read_excel(excel_path, header=None))
     rows = [tuple(row) for row in df.itertuples(index=False, name=None) if row[0]]
@@ -347,17 +414,23 @@ def render_audio_plan(plan, target):
     require_ffmpeg()
     with tempfile.TemporaryDirectory(prefix="study_tts_") as tmp:
         parts, cache = [], {}
+        unique_jobs = []
+        for item, voice in plan:
+            key = (item, voice)
+            if key not in cache:
+                cache[key] = str(Path(tmp) / f"{len(cache):06d}.mp3")
+                unique_jobs.append((key, cache[key]))
+            parts.append(cache[key])
         async def generate():
-            for item, voice in plan:
-                key = (item, voice)
-                if key not in cache:
-                    path = Path(tmp) / f"{len(cache):06d}.mp3"
+            semaphore = asyncio.Semaphore(max(1, min(6, int(CONFIG.get("tts_concurrency", 4)))))
+            async def create_one(key, path):
+                item, voice = key
+                async with semaphore:
                     if voice is None:
-                        make_silence_mp3(float(item), str(path))
+                        await asyncio.to_thread(make_silence_mp3, float(item), path)
                     else:
-                        await save_tts_line(str(item), voice, str(path))
-                    cache[key] = str(path)
-                parts.append(cache[key])
+                        await save_tts_line(str(item), voice, path)
+            await asyncio.gather(*(create_one(key, path) for key, path in unique_jobs))
         asyncio.run(generate())
         if not parts: raise RuntimeError("유효한 문장이 없습니다.")
         concat_mp3_files(parts, str(target))
@@ -457,16 +530,17 @@ class App(ctk.CTk):
         self.body.grid_columnconfigure(0, weight=1)
 
         self.paste_widgets = []
-        self.panels = {
-            "youtube": self._youtube_panel(),
-            "excel_trans": self._excel_panel_trans(),
-            "excel_raw": self._excel_panel_raw(),
-            "pdf": self._pdf_panel(),
-            "tts_bilingual": self._tts_panel_bilingual(),
-            "tts_3times": self._tts_panel_3times(),
-            "tts_single": self._tts_panel_single(),
-            "anki": self._anki_panel(),
+        self.panel_builders = {
+            "youtube": self._youtube_panel,
+            "excel_trans": self._excel_panel_trans,
+            "excel_raw": self._excel_panel_raw,
+            "pdf": self._pdf_panel,
+            "tts_bilingual": self._tts_panel_bilingual,
+            "tts_3times": self._tts_panel_3times,
+            "tts_single": self._tts_panel_single,
+            "anki": self._anki_panel,
         }
+        self.panels = {}
 
     def _nav_btn(self, text, panel):
         btn = ctk.CTkButton(self.nav_scroll, text=text, command=lambda p=panel: self.show_panel(p),
@@ -494,6 +568,8 @@ class App(ctk.CTk):
             "anki": "Excel을 Anki Deck에 추가"
         }
         self.title_label.configure(text=titles[name])
+        if name not in self.panels:
+            self.panels[name] = self.panel_builders[name]()
         for key, btn in self.nav_buttons.items():
             btn.configure(fg_color="#dff4ef" if key == name else "transparent", text_color="#0f766e" if key == name else "#102a2a")
         for panel in self.panels.values(): panel.grid_forget()
@@ -792,6 +868,7 @@ class App(ctk.CTk):
                     if s and s not in seen: seen.add(s); unique_sentences.append(s)
                         
                 self.set_status("엑셀 저장 중...")
+                pd = pandas_module()
                 atomic_write(save_path, lambda p: pd.DataFrame(unique_sentences).to_excel(p, index=False, header=False))
                 self.set_status("완료", "success")
                 self.post_ui(lambda: messagebox.showinfo("완료", f"저장 완료:\n{save_path}"))
@@ -855,6 +932,7 @@ class App(ctk.CTk):
         def task():
             try:
                 if not ex: raise RuntimeError("Excel 파일을 선택하세요.")
+                pd = pandas_module()
                 sentences = [str(s).strip() for s in pd.read_excel(ex, header=None).iloc[:,0].dropna() if str(s).strip()]
                 plan = []
                 for sentence in sentences:

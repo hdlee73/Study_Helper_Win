@@ -6,12 +6,12 @@
 
 **[Releases에서 다운로드](https://github.com/hdlee73/Study_Helper_Win/releases)**
 
-첫 배포 `v2.0.0-rc.1`은 시험판입니다. 자동 빌드·기본 점검 결과와 실제 기기에서의 기능 검증은 구분해 주세요. 코드 서명이 적용되지 않았습니다.
+현재 배포 `v2.1.0-rc.1`은 속도 및 Anki 연결 개선 시험판입니다. 자동 빌드·기본 점검 결과와 실제 기기에서의 기능 검증은 구분해 주세요. 코드 서명이 적용되지 않았습니다.
 
-1. Releases의 **Assets**에서 `StudyHelper-Setup-2.0.0-rc.1.exe`를 다운로드하여 실행합니다. `Source code` ZIP은 설치 프로그램이 아닙니다.
+1. Releases의 **Assets**에서 `StudyHelper-Setup-2.1.0-rc.1.exe`를 다운로드하여 실행합니다. `Source code` ZIP은 설치 프로그램이 아닙니다.
 2. 설치 마법사를 마치고 시작 메뉴에서 **Study Helper**를 실행합니다. 사용자 계정에 설치하므로 관리자 권한은 필요하지 않습니다.
 3. 아래 FFmpeg를 설치한 뒤 프로그램을 다시 실행합니다. YouTube 기능에는 Deno도 준비합니다.
-4. 설치 없이 사용하려면 `StudyHelper-Windows-x64-2.0.0-rc.1.zip`을 풀고 `StudyHelper.exe`를 실행합니다. **`_internal`을 포함한 전체 폴더를 유지**하세요.
+4. 설치 없이 사용하려면 `StudyHelper-Windows-x64-2.1.0-rc.1.zip`을 풀고 `StudyHelper.exe`를 실행합니다. **`_internal`을 포함한 전체 폴더를 유지**하세요.
 
 EXE 사용자는 Python과 pip 라이브러리를 별도로 설치할 필요가 없습니다. 모델 파일은 최초 음성 인식 시 다운로드하며, 설치 파일에 포함하지 않습니다.
 
@@ -42,6 +42,8 @@ PATH를 바꾸지 않으려면 프로그램의 `StudyHelper.exe` 옆에 `ffmpeg`
 | Excel → Anki | [Anki](https://apps.ankiweb.net/)와 [AnkiConnect](https://ankiweb.net/shared/info/2055492159) 설치 후 Anki 실행 |
 
 Anki에는 `English` 노트 유형과 `Front`, `Back`, `Example` 필드를 준비하세요. 기존 카드는 수정하지 않고 중복을 제외한 새 카드만 추가합니다. 연결은 로컬 `127.0.0.1:8765`를 사용합니다.
+
+Anki가 사용자 지정 위치에 설치된 경우 `%LOCALAPPDATA%\StudyHelper\config.json`에 `"anki_executable": "D:\\경로\\Anki.exe"`처럼 전체 경로를 지정할 수 있습니다. 프로그램은 현재 일반 설치 경로와 `C:\Anki\Anki.exe`를 자동으로 찾고, 실행 후 최대 45초 동안 AnkiConnect 시작을 기다립니다.
 
 ## 지원 기능
 
@@ -78,9 +80,17 @@ FFmpeg를 별도 설치하도록 배포하는 방식:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -ExternalFFmpeg
 ```
 
+프로젝트의 `ffmpeg\ffmpeg.exe`와 `ffmpeg\ffprobe.exe`를 함께 묶어 개인용으로 빌드하려면 질문하신 명령을 그대로 사용하면 됩니다.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
+```
+
+이 명령은 `dist\StudyHelper\StudyHelper.exe`와 필요한 내부 폴더를 생성합니다. 다른 PC에 설치할 단일 설치 파일은 이어서 Inno Setup에서 `installer.iss`를 Compile해야 합니다.
+
 `dist\StudyHelper\StudyHelper.exe`가 생성됩니다. [Inno Setup](https://jrsoftware.org/isinfo.php)에서 `installer.iss`를 열어 Compile하면 설치 파일이 만들어집니다. FFmpeg를 동봉하려면 해당 파일과 라이선스/대응 소스 고지를 준비하고 `-ExternalFFmpeg` 없이 빌드하세요.
 
-[자세한 설치·빌드·배포 안내](docs/BUILD_KO.md) · [시험판 변경사항](RELEASE_NOTES.md)
+[다른 PC에 쉽게 설치하기](INSTALL_KO.md) · [자세한 설치·빌드·배포 안내](docs/BUILD_KO.md) · [시험판 변경사항](RELEASE_NOTES.md)
 
 GitHub Actions의 `Windows release`는 Windows에서 Python 3.14.7로 테스트, EXE 기본 점검, 설치 파일 생성 후 릴리스를 게시합니다. `VERSION`에 새 버전을 적어 main에 반영하면 해당 버전만 새로 게시합니다. 같은 태그의 기존 릴리스 파일을 자동 교체하지 않습니다.
 
@@ -88,6 +98,7 @@ GitHub Actions의 `Windows release`는 Windows에서 Python 3.14.7로 테스트,
 
 - 설정·로그·모델: `%LOCALAPPDATA%\StudyHelper`
 - 기본 음성 인식 모델: `base`, CPU INT8, 최대 4스레드. 모델 변경은 앱 종료 후 `config.json`의 `whisper_model` 값을 `tiny`/`base`/`small`로 수정합니다.
+- 속도 설정: 기본 STT 탐색 폭은 `whisper_beam_size: 1`, 동시 TTS 요청은 `tts_concurrency: 4`입니다. 품질을 더 중시하면 beam을 3~5로 올릴 수 있지만 처리 시간이 늘어납니다.
 - 한글 PDF: Windows 맑은 고딕(`malgun.ttf`)이 필요합니다.
 - DLL 오류: [Microsoft Visual C++ x64 재배포 패키지](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)를 확인하세요.
 - `Could not find platform independent libraries <prefix>`가 표시되면 Python 실행 파일과 `Lib` 폴더가 서로 다른 위치에 있는 불완전한 설치입니다. Python 파일을 수동으로 이동하지 말고 공식 설치 관리자로 3.14.7을 복구 설치하세요. `setup.ps1`은 이 상태를 라이브러리 설치 전에 검사합니다.
@@ -102,4 +113,3 @@ GitHub Actions의 `Windows release`는 Windows에서 Python 3.14.7로 테스트,
 본인에게 처리 권한이 있는 콘텐츠만 사용하세요. 쿠키가 필요한 경우 `%LOCALAPPDATA%\StudyHelper\cookies.txt`에 개인적으로 저장하며, 쿠키·로그·개인 데이터는 저장소나 배포 파일에 올리지 마세요.
 
 배포 파일에 포함되는 의존성 고지는 `_internal\THIRD_PARTY_NOTICES`에서 확인할 수 있습니다. FFmpeg 실행 파일은 별도 설치하며, PyAV 등에 포함된 네이티브 라이브러리의 고지는 별개입니다. 이 저장소 자체의 오픈소스 라이선스는 아직 지정하지 않았습니다. 공개 열람 가능 여부와 재배포 허락은 별개입니다.
-

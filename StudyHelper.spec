@@ -6,7 +6,7 @@ root = Path(SPECPATH)
 datas = [(str(root / 'icon.ico'), '.')]
 binaries = [] if os.environ.get('STUDY_EXTERNAL_FFMPEG') == '1' else [(str(root / 'ffmpeg' / name), 'ffmpeg') for name in ('ffmpeg.exe', 'ffprobe.exe')]
 hiddenimports = ['openpyxl', 'faster_whisper', 'yt_dlp_ejs', 'smoke_test']
-for package in ('customtkinter', 'faster_whisper', 'ctranslate2', 'av', 'onnxruntime', 'tokenizers', 'yt_dlp', 'yt_dlp_ejs'):
+for package in ('customtkinter', 'faster_whisper', 'ctranslate2', 'av', 'tokenizers', 'yt_dlp', 'yt_dlp_ejs'):
     d, b, h = collect_all(package)
     datas += d
     binaries += b

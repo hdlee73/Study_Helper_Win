@@ -13,15 +13,18 @@
 | 변경 | 효과 및 차이 |
 |---|---|
 | openai-whisper → faster-whisper, CPU INT8 | PyTorch를 직접 설치하지 않습니다. 모델은 STT 첫 사용 시에만 로드하며 재사용합니다. CPU 사용 스레드는 최대 4개입니다. 속도·정확도는 녹음과 장비에 따라 달라지며 이 노트북에서 벤치마크하지 않았습니다. |
+| 기능별 지연 로딩 | Excel·번역·YouTube·TTS·PDF 라이브러리와 사용하지 않는 화면은 해당 메뉴를 누를 때 불러옵니다. 측정 환경의 시작 모듈 로딩은 평균 18.8초에서 1.5초로 줄었습니다. |
 | 화면 입력을 작업 시작 전에 복사, 화면 갱신을 큐로 전달 | 작업 스레드가 Tk 위젯을 직접 읽거나 갱신하지 않습니다. |
 | 한 번에 한 작업 실행 | 중복 클릭에 의한 모델 동시 실행과 임시 파일 충돌을 막습니다. 작업 중에는 종료 대신 안내를 표시합니다. 강제 취소 기능은 없습니다. |
 | pydub 전체 음성 누적 제거 | 조각별 FFmpeg 처리와 디스크 임시 PCM을 사용합니다. 긴 음성의 RAM 누적을 줄이는 대신 임시 디스크 공간이 필요합니다. |
 | TTS 요청 재시도, 동일 문장/음성 재사용 | 같은 작업에서 같은 음성을 다시 다운로드하지 않습니다. 실패한 문장을 조용히 건너뛰지 않고 오류를 표시합니다. |
+| TTS 병렬 생성·일괄 결합 | 기본 4개 음성을 동시에 생성하고 FFmpeg를 조각마다 실행하지 않습니다. 24조각 결합 측정은 4.11초에서 0.26초로 줄었습니다. 네트워크 상태에 따라 전체 TTS 시간은 달라집니다. |
 | 3회 반복을 Edge TTS로 통일 | 미국·영국·호주 남성 목소리 순서입니다. 기존 gTTS 목소리와 다릅니다. 단일 TTS는 기존 국가·성별 선택을 유지합니다. |
 | 엑셀 읽기 오류 시 중단, 교체 저장 | 손상되거나 잠긴 기존 파일을 빈 파일로 취급하지 않습니다. Excel/PDF/최종 TTS MP3는 임시 파일을 완성한 뒤 교체합니다. |
 | 한글 PDF | Windows의 맑은 고딕을 찾아 fpdf2에 등록합니다. 글꼴 파일 자체를 배포본에 복사하지 않습니다. |
 | 문장 분리 | '바다 위로'처럼 글자 '다' 뒤의 공백을 문장 경계로 오인하지 않습니다. 문장부호 없는 긴 발화의 완벽한 문장 분리는 보장하지 않습니다. |
 | Anki | 선택 덱·노트 유형 기준으로 중복 조회, 필드 검사, 100개 단위 처리, 일반 텍스트의 HTML 특수문자 이스케이프를 적용합니다. 기존 카드는 수정하지 않고 새 카드만 추가합니다. |
+| Anki 실행 탐색 | 일반 경로와 `C:\Anki\Anki.exe`, 설정의 사용자 지정 경로를 찾습니다. 실행 후 AnkiConnect를 최대 45초 기다리며 실행 파일 누락과 포트 미응답을 구분합니다. |
 | 경로 관리 | 아이콘은 실행 위치와 무관하게 찾습니다. 설정·모델·쿠키·로그는 사용자별 LocalAppData에 저장합니다. |
 
 설정은 `%LOCALAPPDATA%\StudyHelper\config.json`입니다. 최초 실행 후 만들어지며 `whisper_model` 기본값은 `base`입니다. 느리면 앱 종료 후 `tiny`로, 인식 품질이 더 필요하면 `small`로 바꿀 수 있습니다. 모델을 바꾸면 최초 다운로드가 다시 필요합니다. 예전 `.windows_audio_anki\config.json` 설정은 자동 이전하지 않으며 필요한 값만 수동 복사하세요.
@@ -110,6 +113,13 @@ py -3.14 -m venv .venv
 4. 카드 앞면 템플릿에 `{{Front}}`, 뒷면에는 `{{FrontSide}}<hr id=answer>{{Back}}<br>{{Example}}` 등을 넣습니다.
 5. Anki를 열어 둔 상태에서 가져옵니다. 연결은 `127.0.0.1:8765`만 사용합니다. 외부 공개 포트나 공유기 포트 포워딩은 필요 없습니다.
 
+설치했는데도 연결 오류가 나면 Anki를 완전히 종료했다가 다시 열고, PowerShell에서 아래 명령으로 확인할 수 있습니다. 결과가 `6`이면 정상입니다.
+
+```powershell
+$body = '{"action":"version","version":6}'
+(Invoke-RestMethod http://127.0.0.1:8765 -Method Post -ContentType application/json -Body $body).result
+```
+
 카드 추가는 전체 작업을 한 번에 되돌리는 트랜잭션이 아닙니다. 도중 실패하면 일부 카드가 추가될 수 있어 앱이 이를 알립니다. 덱 백업 후 사용하고, 재실행 전 추가된 카드를 확인하세요. 기본 Anki 검색의 덱 범위에는 하위 덱이 포함될 수 있습니다.
 
 ## 5. 아이콘을 적용한 EXE 빌드
@@ -121,6 +131,8 @@ Set-Location C:\Vibe\StudyHelper
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 .\dist\StudyHelper\StudyHelper.exe
 ```
+
+위 명령은 프로젝트의 `ffmpeg` 폴더까지 포함한 폴더형 프로그램을 만듭니다. FFmpeg를 외부 설치로 둘 때는 명령 끝에 `-ExternalFFmpeg`를 붙입니다. 다른 PC가 실행할 단일 설치 파일은 이어서 `installer.iss`를 Inno Setup으로 Compile합니다.
 
 결과는 `dist\StudyHelper\StudyHelper.exe`입니다. **옆의 `_internal` 폴더를 포함하여 `dist\StudyHelper` 전체가 프로그램**입니다. EXE만 복사하면 실행되지 않습니다. 첨부한 icon.ico가 EXE 아이콘과 창 아이콘에 모두 적용됩니다. `StudyHelper.spec`에 CustomTkinter 리소스, 음성 인식 라이브러리, FFmpeg, 패키지 메타데이터 수집을 설정했습니다.
 
@@ -165,4 +177,3 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 - [Inno Setup 사용자 권한 설치](https://jrsoftware.org/ishelp/topic_setup_privilegesrequired.htm)
 - [FFmpeg 라이선스와 배포 안내](https://ffmpeg.org/legal.html)
 - [Microsoft SmartScreen 안내](https://learn.microsoft.com/en-us/windows/security/operating-system-security/virus-and-threat-protection/microsoft-defender-smartscreen/)
-

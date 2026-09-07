@@ -37,6 +37,10 @@ def run(app_module, destination):
             window=app_module.App()
             window.withdraw()
             window.update_idletasks()
+            assert len(window.panel_builders)==8
+            for name in window.panel_builders:
+                window.show_panel(name)
+                window.update_idletasks()
             assert len(window.panels)==8
             window.destroy()
             results['checks'].append('all eight GUI panels and icon')

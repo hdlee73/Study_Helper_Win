@@ -26,4 +26,3 @@ Check-Exit
 Check-Exit
 & .\.venv\Scripts\python.exe -m pip freeze | Set-Content -Encoding utf8 requirements-lock.txt
 Write-Host 'Setup complete. Run: .\.venv\Scripts\python.exe study_helper.py'
-
