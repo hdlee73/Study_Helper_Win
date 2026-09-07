@@ -98,6 +98,8 @@ py -3.14 -m venv .venv
 
 `--only-binary=:all:`은 Windows용 미리 빌드된 패키지만 사용합니다. 설치 실패 시 해당 오류를 먼저 해결해야 하며, 무조건 옵션을 지워서 대형 C++ 라이브러리를 소스 빌드하지 마세요. 현재 확인한 버전 조합은 `constraints-resolved.txt`에 있습니다. 같은 조합을 재현하려면 설치 명령에 `-c constraints-resolved.txt`를 추가합니다. 이는 설치 실행 검증을 마친 lock 파일과는 다릅니다. 실제 설치 성공 후 생성된 `requirements-lock.txt`를 배포 버전별로 보관하세요.
 
+`Could not find platform independent libraries <prefix>`가 반복되면 Python 실행 파일과 표준 `Lib` 폴더가 분리된 상태입니다. 공식 Python 설치 관리자로 3.14.7을 복구 설치하고 Python 설치 폴더의 파일을 수동 이동하지 마세요. 개선된 `setup.ps1`은 `encodings`와 tkinter를 포함한 표준 라이브러리 위치를 먼저 검사합니다.
+
 처음 STT를 실행하면 Hugging Face에서 모델을 다운로드합니다. 이후 모델이 캐시에 있으면 STT는 오프라인 사용이 가능합니다. 번역·TTS·YouTube는 인터넷이 필요합니다. CPU 모드이므로 CUDA는 설치하지 않아도 됩니다. DLL 오류가 나면 [Microsoft의 Visual C++ 재배포 패키지 안내](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)에서 x64 런타임을 확인하세요.
 
 ## 4. Anki 준비
@@ -163,3 +165,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 - [Inno Setup 사용자 권한 설치](https://jrsoftware.org/ishelp/topic_setup_privilegesrequired.htm)
 - [FFmpeg 라이선스와 배포 안내](https://ffmpeg.org/legal.html)
 - [Microsoft SmartScreen 안내](https://learn.microsoft.com/en-us/windows/security/operating-system-security/virus-and-threat-protection/microsoft-defender-smartscreen/)
+
