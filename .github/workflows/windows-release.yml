@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: windows-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -113,3 +113,4 @@ jobs:
             build/StudyHelper/warn-StudyHelper.txt
             release-assets/SHA256SUMS.txt
           if-no-files-found: ignore
+
