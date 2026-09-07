@@ -1,0 +1,11 @@
+# Python 3.14.7 standard (GIL), Windows x64. Resolve and lock after validation.
+customtkinter>=5.2.2,<6
+pandas>=2.3.3,<4
+openpyxl>=3.1.5,<4
+requests>=2.32.4,<3
+deep-translator>=1.11.4,<2
+yt-dlp[default]>=2026.3.17
+faster-whisper>=1.2.1,<2
+ctranslate2>=4.8.0,<5
+edge-tts>=7.2.0,<8
+fpdf2>=2.8.4,<3
