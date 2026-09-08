@@ -971,7 +971,17 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()
     if len(sys.argv) == 3 and sys.argv[1] == "--self-test":
         from smoke_test import run
-        run(sys.modules[__name__], sys.argv[2])
-        raise SystemExit(0)
+        try:
+            run(sys.modules[__name__], sys.argv[2])
+        except Exception:
+            exit_code = 1
+        else:
+            exit_code = 0
+        # Some native GUI/audio libraries keep helper threads alive in a frozen
+        # executable. The validation result is already written at this point.
+        if getattr(sys, "frozen", False):
+            os._exit(exit_code)
+        raise SystemExit(exit_code)
     app = App()
     app.mainloop()
+

@@ -1,6 +1,8 @@
 param([switch]$ExternalFFmpeg)
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
+$running = Get-Process -Name StudyHelper -ErrorAction SilentlyContinue
+if ($running) { throw 'StudyHelper.exe가 실행 중입니다. 프로그램을 종료한 뒤 빌드를 다시 실행하세요.' }
 $requiredFiles = @('.venv\Scripts\python.exe','icon.ico')
 if (-not $ExternalFFmpeg) { $requiredFiles += @('ffmpeg\ffmpeg.exe','ffmpeg\ffprobe.exe') }
 foreach ($file in $requiredFiles) {
@@ -14,3 +16,4 @@ $env:STUDY_EXTERNAL_FFMPEG = if ($ExternalFFmpeg) { '1' } else { '0' }
 & .\.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean StudyHelper.spec
 if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
 Write-Host 'Built: dist\StudyHelper\StudyHelper.exe. Test the complete folder before packaging.'
+
