@@ -88,6 +88,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 
 이 명령은 `dist\StudyHelper\StudyHelper.exe`와 필요한 내부 폴더를 생성합니다. 다른 PC에 설치할 단일 설치 파일은 이어서 Inno Setup에서 `installer.iss`를 Compile해야 합니다.
 
+이 컴퓨터에 설치된 Inno Setup 7로 명령줄에서 설치 파일까지 만들려면:
+
+```powershell
+& 'C:\Program Files\Inno Setup 7\ISCC.exe' '/DAppVersion=2.1.0-rc.1' '.\installer.iss'
+```
+
 `dist\StudyHelper\StudyHelper.exe`가 생성됩니다. [Inno Setup](https://jrsoftware.org/isinfo.php)에서 `installer.iss`를 열어 Compile하면 설치 파일이 만들어집니다. FFmpeg를 동봉하려면 해당 파일과 라이선스/대응 소스 고지를 준비하고 `-ExternalFFmpeg` 없이 빌드하세요.
 
 [다른 PC에 쉽게 설치하기](INSTALL_KO.md) · [자세한 설치·빌드·배포 안내](docs/BUILD_KO.md) · [시험판 변경사항](RELEASE_NOTES.md)

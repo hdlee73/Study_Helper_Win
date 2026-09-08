@@ -1,5 +1,9 @@
 # 다른 Windows 컴퓨터에 설치하는 가장 쉬운 방법
 
+## 지금 만든 설치 파일을 내 다른 PC에 설치
+
+`StudyHelper-Setup-2.1.0-rc.1-bundled-FFmpeg.exe` 파일 하나를 USB나 개인 클라우드로 옮겨 실행하면 됩니다. Python과 FFmpeg를 따로 설치할 필요가 없습니다. YouTube 기능에는 Deno가, Anki 기능에는 Anki와 AnkiConnect가 별도로 필요합니다.
+
 ## 설치 프로그램 사용
 
 1. [GitHub Releases](https://github.com/hdlee73/Study_Helper_Win/releases)에서 가장 최신 버전을 엽니다.
@@ -19,9 +23,18 @@ Releases에서 `StudyHelper-Windows-x64-2.1.0-rc.1.zip`을 받아 압축을 완�
 프로젝트 폴더에서 다음 명령으로 프로그램을 빌드합니다.
 
 ```powershell
+Set-Location C:\Vibe\StudyHelper
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-이 명령의 결과인 `dist\StudyHelper` 전체를 전달할 수 있습니다. 설치 파일 하나로 전달하려면 Inno Setup에서 `installer.iss`를 열어 Compile하고, `installer_output`에 생성된 Setup EXE를 전달합니다.
+네, 질문하신 명령이 맞습니다. 이 명령의 결과인 `dist\StudyHelper` 전체를 전달할 수 있습니다. `StudyHelper.exe`만 따로 옮기면 실행되지 않습니다.
+
+설치 파일 하나로 만들려면 Inno Setup 7에서 `installer.iss`를 열어 Compile하거나 이어서 다음 명령을 실행합니다.
+
+```powershell
+& 'C:\Program Files\Inno Setup 7\ISCC.exe' '/DAppVersion=2.1.0-rc.1' '.\installer.iss'
+```
+
+완성 파일은 `installer_output\StudyHelper-Setup-2.1.0-rc.1.exe`입니다. `build.ps1`에 `-ExternalFFmpeg`를 붙이지 않았으므로 프로젝트의 `ffmpeg` 폴더도 설치 파일에 포함됩니다.
 
 다른 PC에서 먼저 시험할 항목은 프로그램 실행, FFmpeg 인식, 최초 음성 모델 다운로드, 한글 PDF, TTS, AnkiConnect 연결입니다. 코드 서명이 없는 시험판은 Windows SmartScreen 안내가 나타날 수 있습니다.
