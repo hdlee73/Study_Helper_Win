@@ -3,9 +3,9 @@ import os
 from PyInstaller.utils.hooks import collect_all, copy_metadata
 
 root = Path(SPECPATH)
-datas = [(str(root / 'icon.ico'), '.')]
+datas = [(str(root / 'icon.ico'), '.'), (str(root / 'VERSION'), '.')]
 binaries = [] if os.environ.get('STUDY_EXTERNAL_FFMPEG') == '1' else [(str(root / 'ffmpeg' / name), 'ffmpeg') for name in ('ffmpeg.exe', 'ffprobe.exe')]
-hiddenimports = ['openpyxl', 'faster_whisper', 'yt_dlp_ejs', 'smoke_test', 'study_helper_core', 'docx']
+hiddenimports = ['openpyxl', 'faster_whisper', 'yt_dlp_ejs', 'smoke_test', 'study_helper_core', 'studyhelper_runtime', 'docx']
 for package in ('customtkinter', 'faster_whisper', 'ctranslate2', 'av', 'tokenizers', 'yt_dlp', 'yt_dlp_ejs', 'docx'):
     d, b, h = collect_all(package)
     datas += d
@@ -16,7 +16,8 @@ for name in ('faster-whisper', 'edge-tts', 'python-docx', 'fpdf2', 'yt-dlp', 'ct
 if (root / 'THIRD_PARTY_NOTICES').is_dir():
     datas.append((str(root / 'THIRD_PARTY_NOTICES'), 'THIRD_PARTY_NOTICES'))
 a = Analysis([str(root / 'study_helper.py')], pathex=[str(root)], binaries=binaries,
-             datas=datas, hiddenimports=hiddenimports, excludes=['torch', 'whisper', 'pydub', 'gtts'])
+             datas=datas, hiddenimports=hiddenimports, runtime_hooks=[str(root / 'sitecustomize.py')],
+             excludes=['torch', 'whisper', 'pydub', 'gtts'])
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='StudyHelper',
           debug=False, strip=False, upx=False, console=False, icon=str(root / 'icon.ico'))
