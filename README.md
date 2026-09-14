@@ -4,11 +4,11 @@ Windows에서 MP3, Excel, Word(DOCX), TTS, Anki를 한 흐름으로 연결하는
 
 ## 최신 배포
 
-현재 시험판: **v2.2.0-rc.1**
+현재 시험판: **v2.2.0-rc.2**
 
 [GitHub Releases에서 다운로드](https://github.com/hdlee73/Study_Helper_Win/releases)
 
-일반 사용자는 `StudyHelper-Setup-2.2.0-rc.1.exe`를 권장합니다. 설치 없이 사용하려면 `StudyHelper-Windows-x64-2.2.0-rc.1.zip`을 풀고 `StudyHelper.exe`를 실행하세요. ZIP 버전은 `_internal` 폴더를 포함한 전체 폴더를 그대로 유지해야 합니다.
+일반 사용자는 `StudyHelper-Setup-2.2.0-rc.2.exe`를 권장합니다. 설치 없이 사용하려면 `StudyHelper-Windows-x64-2.2.0-rc.2.zip`을 풀고 `StudyHelper.exe`를 실행하세요. ZIP 버전은 `_internal` 폴더를 포함한 전체 폴더를 그대로 유지해야 합니다.
 
 ## 주요 기능
 
@@ -29,14 +29,24 @@ DOCX 변환 화면에서 **타임라인 포함** 여부를 선택할 수 있습�
 
 ### MP3 → Excel 번역 제한 대응
 
-번역 요청은 Google 번역의 초당 요청 제한을 넘지 않도록 순차 처리하고 요청 간격을 둡니다. 429/Too Many Requests 계열 오류에는 자동 재시도와 백오프를 적용합니다. 다만 외부 서비스의 일일 한도 자체가 소진된 경우에는 잠시 후 다시 시도해야 합니다.
+`v2.2.0-rc.1`에서는 기존 deep-translator의 Google 웹 번역 경로를 유지하면서 요청 간격만 줄였기 때문에, 특정 IP/세션에서는 여전히 `Too Many Requests`가 발생할 수 있었습니다.
+
+`v2.2.0-rc.2`에서는 번역 경로를 다음처럼 보강했습니다.
+
+- Google의 경량 JSON 번역 엔드포인트를 우선 사용합니다.
+- 요청 속도를 약 **1초당 1회 이하**로 제한합니다.
+- 429/일시 오류에는 추가 대기 후 자동 재시도합니다.
+- Google 경로가 계속 실패하면 **MyMemory**를 예비 번역 서비스로 자동 시도합니다.
+- 두 경로가 모두 실패한 경우에만 기존 deep-translator 경로를 마지막으로 시도합니다.
+
+따라서 rc.1보다 요청 제한에 훨씬 강합니다. 다만 회사망/보안망에서 Google과 MyMemory 도메인을 모두 차단하거나 외부 서비스 자체가 장애인 경우에는 번역이 실패할 수 있습니다.
 
 ## 추가 준비
 
 | 기능 | 추가 준비 |
 |---|---|
 | MP3 → Excel / DOCX | 최초 Whisper 모델 다운로드에 인터넷 필요. 모델 캐시 후 STT는 로컬 수행 |
-| 번역 Excel | Google 번역 서비스 접속 필요 |
+| 번역 Excel | Google 번역 접속 필요. Google 실패 시 MyMemory를 예비 경로로 사용 |
 | Excel → MP3 | FFmpeg + 인터넷 필요. Microsoft Edge 음성 서비스 사용 |
 | YouTube → MP3 | FFmpeg + Deno. 사이트 상황에 따라 로그인/쿠키 필요 |
 | Excel → Anki | Anki + AnkiConnect |
@@ -71,7 +81,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 .\.venv\Scripts\python.exe .\study_helper.py
 ```
 
-`study_helper.py`는 현재 앱 진입점이고, 검증된 기존 백엔드는 `study_helper_core.py`에 분리되어 있습니다. 새 진입점에서 번역 속도 제한, DOCX 생성, 새 UI를 적용합니다.
+`study_helper.py`는 앱 진입점이고, 기존 백엔드는 `study_helper_core.py`에 분리되어 있습니다. `sitecustomize.py`와 `studyhelper_runtime.py`가 번역 경로 보강과 배포 버전 표시를 적용합니다.
 
 ## 직접 빌드
 
@@ -91,12 +101,12 @@ GitHub Actions의 `Windows release` 워크플로는 테스트, PyInstaller 빌�
 %LOCALAPPDATA%\StudyHelper
 ```
 
-기본 음성 인식은 faster-whisper `base`, CPU INT8, `beam_size=1`, VAD 사용입니다. 번역 요청 간격 기본값은 약 0.30초로 두어 초당 요청 제한에 여유를 둡니다.
+기본 음성 인식은 faster-whisper `base`, CPU INT8, `beam_size=1`, VAD 사용입니다. rc.2의 번역 요청 간격 기본값은 약 1.05초입니다.
 
 ## 개인정보
 
 - 음성 인식(STT): 로컬 수행
-- 번역: Google 서비스로 문장 전송
+- 번역: Google 번역 서비스로 문장 전송. 장애 시 MyMemory로 전송될 수 있음
 - TTS: Microsoft 서비스로 문장 전송
 - Anki: 로컬 `127.0.0.1:8765` 연결
 
